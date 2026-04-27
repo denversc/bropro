@@ -14,8 +14,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.TextFormat
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,13 +31,14 @@ class MainActivity : ComponentActivity() {
 
     private var pendingPrintText: String? = null
     private var pendingFontSize: Float? = null
+    private var pendingAlignment: VerticalAlignment = VerticalAlignment.CENTER
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         if (permissions.values.all { it }) {
             pendingPrintText?.let {
-                viewModel.printLabel(it, pendingFontSize)
+                viewModel.printLabel(it, pendingFontSize, pendingAlignment)
                 pendingPrintText = null
                 pendingFontSize = null
             }
@@ -58,8 +58,8 @@ class MainActivity : ComponentActivity() {
                 ) {
                     LabelPrinterApp(
                         viewModel = viewModel,
-                        onPrintRequested = { text, fontSize ->
-                            checkPermissionsAndPrint(text, fontSize)
+                        onPrintRequested = { text, fontSize, alignment ->
+                            checkPermissionsAndPrint(text, fontSize, alignment)
                         }
                     )
                 }
@@ -67,7 +67,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun checkPermissionsAndPrint(text: String, fontSize: Float?) {
+    private fun checkPermissionsAndPrint(text: String, fontSize: Float?, alignment: VerticalAlignment) {
         val permissionsNeeded = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN)
         } else {
@@ -79,10 +79,11 @@ class MainActivity : ComponentActivity() {
         }
 
         if (missingPermissions.isEmpty()) {
-            viewModel.printLabel(text, fontSize)
+            viewModel.printLabel(text, fontSize, alignment)
         } else {
             pendingPrintText = text
             pendingFontSize = fontSize
+            pendingAlignment = alignment
             requestPermissionLauncher.launch(missingPermissions.toTypedArray())
         }
     }
@@ -92,11 +93,13 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun LabelPrinterApp(
     viewModel: MainViewModel,
-    onPrintRequested: (String, Float?) -> Unit
+    onPrintRequested: (String, Float?, VerticalAlignment) -> Unit
 ) {
     var text by remember { mutableStateOf("") }
     var customFontSize by remember { mutableStateOf<Float?>(null) }
+    var verticalAlignment by remember { mutableStateOf(VerticalAlignment.CENTER) }
     var showFontSizeDialog by remember { mutableStateOf(false) }
+    var showAlignmentDialog by remember { mutableStateOf(false) }
 
     val status by viewModel.status.collectAsState()
     val history by viewModel.history.collectAsState()
@@ -113,6 +116,17 @@ fun LabelPrinterApp(
             onConfirm = { size ->
                 customFontSize = size
                 showFontSizeDialog = false
+            }
+        )
+    }
+
+    if (showAlignmentDialog) {
+        VerticalAlignmentDialog(
+            currentAlignment = verticalAlignment,
+            onDismiss = { showAlignmentDialog = false },
+            onAlignmentSelected = { alignment ->
+                verticalAlignment = alignment
+                showAlignmentDialog = false
             }
         )
     }
@@ -135,7 +149,7 @@ fun LabelPrinterApp(
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(
-            onClick = { onPrintRequested(text, customFontSize) },
+            onClick = { onPrintRequested(text, customFontSize, verticalAlignment) },
             modifier = Modifier.fillMaxWidth(),
             enabled = text.isNotBlank()
         ) {
@@ -151,6 +165,20 @@ fun LabelPrinterApp(
             Icon(Icons.Default.TextFormat, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
             Text("Font Size: ${currentFontSize.toInt()} pt${if (customFontSize == null) " (Auto)" else ""}")
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        OutlinedIconButton(
+            onClick = { showAlignmentDialog = true },
+            modifier = Modifier.size(48.dp)
+        ) {
+            val icon = when (verticalAlignment) {
+                VerticalAlignment.TOP -> Icons.Default.VerticalAlignTop
+                VerticalAlignment.CENTER -> Icons.Default.VerticalAlignCenter
+                VerticalAlignment.BOTTOM -> Icons.Default.VerticalAlignBottom
+            }
+            Icon(icon, contentDescription = "Vertical Alignment")
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -189,6 +217,73 @@ fun LabelPrinterApp(
                 )
             }
         }
+    }
+}
+
+@Composable
+fun VerticalAlignmentDialog(
+    currentAlignment: VerticalAlignment,
+    onDismiss: () -> Unit,
+    onAlignmentSelected: (VerticalAlignment) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Vertical Alignment") },
+        text = {
+            Column {
+                AlignmentOption(
+                    label = "Top",
+                    icon = Icons.Default.VerticalAlignTop,
+                    isSelected = currentAlignment == VerticalAlignment.TOP,
+                    onClick = { onAlignmentSelected(VerticalAlignment.TOP) }
+                )
+                AlignmentOption(
+                    label = "Center",
+                    icon = Icons.Default.VerticalAlignCenter,
+                    isSelected = currentAlignment == VerticalAlignment.CENTER,
+                    onClick = { onAlignmentSelected(VerticalAlignment.CENTER) }
+                )
+                AlignmentOption(
+                    label = "Bottom",
+                    icon = Icons.Default.VerticalAlignBottom,
+                    isSelected = currentAlignment == VerticalAlignment.BOTTOM,
+                    onClick = { onAlignmentSelected(VerticalAlignment.BOTTOM) }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun AlignmentOption(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            icon, 
+            contentDescription = null,
+            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 

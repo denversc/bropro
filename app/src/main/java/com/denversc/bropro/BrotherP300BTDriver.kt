@@ -22,9 +22,13 @@ class BrotherP300BTDriver {
   }
 
   @SuppressLint("MissingPermission")
-  suspend fun printLabel(text: String, customFontSize: Float? = null): Result<Unit> = withContext(Dispatchers.IO) {
+  suspend fun printLabel(
+      text: String, 
+      customFontSize: Float? = null,
+      alignment: VerticalAlignment = VerticalAlignment.CENTER
+  ): Result<Unit> = withContext(Dispatchers.IO) {
     val device = findPairedDevice() ?: return@withContext Result.failure(Exception("P300BT not paired"))
-    val (bitmap, _) = LabelBitmapGenerator.createLabelBitmap(text, customFontSize)
+    val (bitmap, _) = LabelBitmapGenerator.createLabelBitmap(text, customFontSize, alignment)
 
     var socket: BluetoothSocket? = null
     try {
