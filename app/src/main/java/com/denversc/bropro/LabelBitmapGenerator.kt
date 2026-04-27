@@ -55,16 +55,34 @@ object LabelBitmapGenerator {
 
     val textPaint = TextPaint().apply {
       color = textColor
-      typeface = Typeface.DEFAULT_BOLD
+      typeface = Typeface.DEFAULT
       isAntiAlias = false
+    }
+
+    val spannableText = android.text.SpannableString(cleanText)
+    val firstLineEnd = cleanText.indexOf('\n').let { if (it == -1) cleanText.length else it }
+    if (firstLineEnd > 0) {
+        spannableText.setSpan(
+            android.text.style.StyleSpan(Typeface.BOLD),
+            0,
+            firstLineEnd,
+            android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
     }
 
     // Function to calculate layout for a given font size
     fun calculateLayout(fontSize: Float): StaticLayout {
       textPaint.textSize = fontSize
       var maxWidth = 0f
-      cleanText.split("\n").forEach { line ->
-        val w = textPaint.measureText(line)
+      cleanText.split("\n").forEachIndexed { index, line ->
+        val w = if (index == 0) {
+            textPaint.typeface = Typeface.DEFAULT_BOLD
+            val width = textPaint.measureText(line)
+            textPaint.typeface = Typeface.DEFAULT
+            width
+        } else {
+            textPaint.measureText(line)
+        }
         if (w > maxWidth) maxWidth = w
       }
       val exactWidth = maxWidth.toInt().coerceAtLeast(1)
@@ -75,7 +93,7 @@ object LabelBitmapGenerator {
           HorizontalAlignment.RIGHT -> Layout.Alignment.ALIGN_OPPOSITE
       }
 
-      return StaticLayout.Builder.obtain(cleanText, 0, cleanText.length, textPaint, exactWidth)
+      return StaticLayout.Builder.obtain(spannableText, 0, spannableText.length, textPaint, exactWidth)
           .setAlignment(textAlignment)
           .setLineSpacing(0f, 1f)
           .setIncludePad(false)
