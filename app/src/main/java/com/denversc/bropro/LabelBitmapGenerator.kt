@@ -33,21 +33,23 @@ data class QrConfig(
 )
 
 object LabelBitmapGenerator {
+  const val BARCODE_CHAR = '\u25A3'
   private const val PRINTER_HEAD_WIDTH = 128 // Height of the bitmap for printing
 
   fun createLabelBitmap(
-      text: String, 
+      text: String,
       customFontSize: Float? = null,
       alignment: VerticalAlignment = VerticalAlignment.CENTER,
       horizontalAlignment: HorizontalAlignment = HorizontalAlignment.CENTER,
       colorMode: ColorMode = ColorMode.NORMAL,
       qrConfig: QrConfig = QrConfig()
   ): Pair<Bitmap, Float> {
+    val cleanText = text.replace(Regex("\\s*$BARCODE_CHAR\\s*"), "")
     // A 12mm tape only has a printable area of about 9mm (roughly 64 pixels)
     // centered on the 128-pixel print head.
     val maxPrintHeight = 64f
     var currentFontSize = customFontSize ?: 60f
-    
+
     val textColor = if (colorMode == ColorMode.INVERTED) Color.WHITE else Color.BLACK
     val backgroundColor = if (colorMode == ColorMode.INVERTED) Color.BLACK else Color.WHITE
 
@@ -61,19 +63,19 @@ object LabelBitmapGenerator {
     fun calculateLayout(fontSize: Float): StaticLayout {
       textPaint.textSize = fontSize
       var maxWidth = 0f
-      text.split("\n").forEach { line ->
+      cleanText.split("\n").forEach { line ->
         val w = textPaint.measureText(line)
         if (w > maxWidth) maxWidth = w
       }
       val exactWidth = maxWidth.toInt().coerceAtLeast(1)
-      
+
       val textAlignment = when (horizontalAlignment) {
           HorizontalAlignment.LEFT -> Layout.Alignment.ALIGN_NORMAL
           HorizontalAlignment.CENTER -> Layout.Alignment.ALIGN_CENTER
           HorizontalAlignment.RIGHT -> Layout.Alignment.ALIGN_OPPOSITE
       }
-      
-      return StaticLayout.Builder.obtain(text, 0, text.length, textPaint, exactWidth)
+
+      return StaticLayout.Builder.obtain(cleanText, 0, cleanText.length, textPaint, exactWidth)
           .setAlignment(textAlignment)
           .setLineSpacing(0f, 1f)
           .setIncludePad(false)
@@ -95,9 +97,8 @@ object LabelBitmapGenerator {
     val qrSize = 64
     val qrPadding = 16
     if (qrConfig.placement != QrPlacement.NONE) {
-        val qrContent = if (qrConfig.useCustomContent) qrConfig.customContent else text
-        if (qrContent.isNotBlank()) {
-            try {
+        val qrContent = if (qrConfig.useCustomContent) qrConfig.customContent else cleanText
+        if (qrContent.isNotBlank()) {            try {
                 val writer = QRCodeWriter()
                 val hints = mapOf(com.google.zxing.EncodeHintType.MARGIN to 0)
                 // Request the minimum possible size (0,0) to get the raw module grid

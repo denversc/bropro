@@ -120,6 +120,9 @@ fun LabelPrinterApp(
     var showHorizontalAlignmentDialog by remember { mutableStateOf(false) }
     var showColorModeDialog by remember { mutableStateOf(false) }
     var showQrCodeDialog by remember { mutableStateOf(false) }
+    var showPlacementErrorDialog by remember { mutableStateOf(false) }
+    
+    var pendingPrintText by remember { mutableStateOf("") }
 
     val status by viewModel.status.collectAsState()
     val history by viewModel.history.collectAsState()
@@ -174,12 +177,23 @@ fun LabelPrinterApp(
     }
 
     if (showQrCodeDialog) {
-        QrCodeDialog(
+        AddQrCodeDialog(
             currentConfig = qrConfig,
             onDismiss = { showQrCodeDialog = false },
-            onConfigConfirmed = { config ->
+            onConfirm = { config ->
                 qrConfig = config
+                text += LabelBitmapGenerator.BARCODE_CHAR
                 showQrCodeDialog = false
+            }
+        )
+    }
+
+    if (showPlacementErrorDialog) {
+        BarcodePlacementErrorDialog(
+            onDismiss = { showPlacementErrorDialog = false },
+            onSelectPlacement = { placement ->
+                onPrintRequested(pendingPrintText, customFontSize, verticalAlignment, horizontalAlignment, colorMode, qrConfig.copy(placement = placement))
+                showPlacementErrorDialog = false
             }
         )
     }
@@ -202,7 +216,22 @@ fun LabelPrinterApp(
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(
-            onClick = { onPrintRequested(text, customFontSize, verticalAlignment, horizontalAlignment, colorMode, qrConfig) },
+            onClick = { 
+                val barcodeChar = LabelBitmapGenerator.BARCODE_CHAR
+                val count = text.count { it == barcodeChar }
+                val cleanText = text.replace(Regex("\\s*$barcodeChar\\s*"), "")
+                val trimmedText = text.trim()
+
+                if (count == 0) {
+                    onPrintRequested(text, customFontSize, verticalAlignment, horizontalAlignment, colorMode, qrConfig.copy(placement = QrPlacement.NONE))
+                } else if (count == 1 && (trimmedText.startsWith(barcodeChar) || trimmedText.endsWith(barcodeChar))) {
+                    val placement = if (trimmedText.startsWith(barcodeChar)) QrPlacement.LEFT else QrPlacement.RIGHT
+                    onPrintRequested(cleanText, customFontSize, verticalAlignment, horizontalAlignment, colorMode, qrConfig.copy(placement = placement))
+                } else {
+                    pendingPrintText = cleanText
+                    showPlacementErrorDialog = true
+                }
+            },
             modifier = Modifier.fillMaxWidth(),
             enabled = text.isNotBlank()
         ) {
@@ -271,7 +300,7 @@ fun LabelPrinterApp(
                 onClick = { showQrCodeDialog = true },
                 modifier = Modifier.size(48.dp)
             ) {
-                Icon(Icons.Default.QrCode, contentDescription = "QR Code Options")
+                Icon(Icons.Default.QrCode, contentDescription = "Add QR Code")
             }
         }
 
@@ -393,60 +422,77 @@ fun HorizontalAlignmentDialog(
 }
 
 @Composable
-fun QrCodeDialog(
+fun AddQrCodeDialog(
     currentConfig: QrConfig,
     onDismiss: () -> Unit,
-    onConfigConfirmed: (QrConfig) -> Unit
+    onConfirm: (QrConfig) -> Unit
 ) {
-    var placement by remember { mutableStateOf(currentConfig.placement) }
     var useCustomContent by remember { mutableStateOf(currentConfig.useCustomContent) }
     var customContent by remember { mutableStateOf(currentConfig.customContent) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("QR Code Options") },
+        title = { Text("Add QR Code") },
         text = {
             Column {
-                Text("Placement", style = MaterialTheme.typography.titleSmall)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = placement == QrPlacement.NONE, onClick = { placement = QrPlacement.NONE })
-                    Text("None", modifier = Modifier.clickable { placement = QrPlacement.NONE })
-                    Spacer(modifier = Modifier.width(8.dp))
-                    RadioButton(selected = placement == QrPlacement.LEFT, onClick = { placement = QrPlacement.LEFT })
-                    Text("Left", modifier = Modifier.clickable { placement = QrPlacement.LEFT })
-                    Spacer(modifier = Modifier.width(8.dp))
-                    RadioButton(selected = placement == QrPlacement.RIGHT, onClick = { placement = QrPlacement.RIGHT })
-                    Text("Right", modifier = Modifier.clickable { placement = QrPlacement.RIGHT })
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text("Content", style = MaterialTheme.typography.titleSmall)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = !useCustomContent, onClick = { useCustomContent = false })
-                    Text("Use Label Text", modifier = Modifier.clickable { useCustomContent = false })
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = useCustomContent, onClick = { useCustomContent = true })
-                    Text("Custom Value", modifier = Modifier.clickable { useCustomContent = true })
-                }
-
-                if (useCustomContent) {
-                    OutlinedTextField(
-                        value = customContent,
-                        onValueChange = { customContent = it },
-                        label = { Text("QR Content") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                    Checkbox(
+                        checked = !useCustomContent,
+                        onCheckedChange = { useCustomContent = !it }
+                    )
+                    Text(
+                        text = "Use Label Text",
+                        modifier = Modifier.clickable { useCustomContent = !useCustomContent }
                     )
                 }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = customContent,
+                    onValueChange = { 
+                        customContent = it
+                        useCustomContent = true 
+                    },
+                    label = { Text("Custom Value") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
             }
         },
         confirmButton = {
             TextButton(onClick = { 
-                onConfigConfirmed(QrConfig(placement, useCustomContent, customContent)) 
+                onConfirm(QrConfig(QrPlacement.NONE, useCustomContent, customContent)) 
             }) {
-                Text("Set")
+                Text("Add")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun BarcodePlacementErrorDialog(
+    onDismiss: () -> Unit,
+    onSelectPlacement: (QrPlacement) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("QR Code Placement") },
+        text = { Text("The QR Code marker is missing, in an invalid location, or occurs multiple times.\n\n" +
+            "Would you like to print the QR Code to the left or right of the text?") },
+        confirmButton = {
+            Row {
+                TextButton(onClick = { onSelectPlacement(QrPlacement.LEFT) }) {
+                    Text("Left")
+                }
+                TextButton(onClick = { onSelectPlacement(QrPlacement.RIGHT) }) {
+                    Text("Right")
+                }
             }
         },
         dismissButton = {
