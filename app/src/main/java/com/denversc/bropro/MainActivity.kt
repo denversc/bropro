@@ -106,15 +106,12 @@ fun LabelPrinterApp(
 
     if (showFontSizeDialog) {
         FontSizeDialog(
-            currentSize = currentFontSize,
-            isAuto = customFontSize == null,
+            initialSize = currentFontSize,
+            autoSize = autoFontSize,
+            initialIsAuto = customFontSize == null,
             onDismiss = { showFontSizeDialog = false },
-            onSizeSelected = { size ->
+            onConfirm = { size ->
                 customFontSize = size
-                showFontSizeDialog = false
-            },
-            onResetToAuto = {
-                customFontSize = null
                 showFontSizeDialog = false
             }
         )
@@ -197,38 +194,43 @@ fun LabelPrinterApp(
 
 @Composable
 fun FontSizeDialog(
-    currentSize: Float,
-    isAuto: Boolean,
+    initialSize: Float,
+    autoSize: Float,
+    initialIsAuto: Boolean,
     onDismiss: () -> Unit,
-    onSizeSelected: (Float) -> Unit,
-    onResetToAuto: () -> Unit
+    onConfirm: (Float?) -> Unit
 ) {
-    var sliderValue by remember { mutableStateOf(currentSize) }
+    var sliderValue by remember { mutableStateOf(initialSize) }
+    var isAuto by remember { mutableStateOf(initialIsAuto) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Select Font Size") },
         text = {
             Column {
-                Text("Size: ${sliderValue.toInt()} pt")
+                Text(if (isAuto) "Size: ${sliderValue.toInt()} pt (Auto)" else "Size: ${sliderValue.toInt()} pt")
                 Slider(
                     value = sliderValue,
-                    onValueChange = { sliderValue = it },
+                    onValueChange = { 
+                        sliderValue = it
+                        isAuto = false
+                    },
                     valueRange = 1f..60f,
                     steps = 58
                 )
-                if (!isAuto) {
-                    TextButton(
-                        onClick = onResetToAuto,
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
-                    ) {
-                        Text("Reset to Auto-calculated")
-                    }
+                TextButton(
+                    onClick = {
+                        sliderValue = autoSize
+                        isAuto = true
+                    },
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                ) {
+                    Text("Reset to Auto-calculated")
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSizeSelected(sliderValue) }) {
+            TextButton(onClick = { onConfirm(if (isAuto) null else sliderValue) }) {
                 Text("Set")
             }
         },
