@@ -99,15 +99,24 @@ object LabelBitmapGenerator {
         if (qrContent.isNotBlank()) {
             try {
                 val writer = QRCodeWriter()
-                val bitMatrix = writer.encode(qrContent, BarcodeFormat.QR_CODE, qrSize, qrSize)
+                val hints = mapOf(com.google.zxing.EncodeHintType.MARGIN to 0)
+                // Request the minimum possible size (0,0) to get the raw module grid
+                val bitMatrix = writer.encode(qrContent, BarcodeFormat.QR_CODE, 0, 0, hints)
+                val mWidth = bitMatrix.width
+                val mHeight = bitMatrix.height
+                
                 qrBitmap = Bitmap.createBitmap(qrSize, qrSize, Bitmap.Config.RGB_565)
+                // Manually stretch the raw grid to exactly qrSize x qrSize (64x64)
+                // using nearest-neighbor mapping.
                 for (x in 0 until qrSize) {
                     for (y in 0 until qrSize) {
-                        qrBitmap.setPixel(x, y, if (bitMatrix[x, y]) textColor else backgroundColor)
+                        val matrixX = x * mWidth / qrSize
+                        val matrixY = y * mHeight / qrSize
+                        qrBitmap.setPixel(x, y, if (bitMatrix[matrixX, matrixY]) textColor else backgroundColor)
                     }
                 }
             } catch (e: Exception) {
-                // Fail silently or handle error - for now, just don't draw QR
+                // Fail silently
             }
         }
     }
