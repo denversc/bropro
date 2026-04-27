@@ -34,13 +34,14 @@ class MainActivity : ComponentActivity() {
     private var pendingAlignment: VerticalAlignment = VerticalAlignment.CENTER
     private var pendingHorizontalAlignment: HorizontalAlignment = HorizontalAlignment.CENTER
     private var pendingColorMode: ColorMode = ColorMode.NORMAL
+    private var pendingQrConfig: QrConfig = QrConfig()
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         if (permissions.values.all { it }) {
             pendingPrintText?.let {
-                viewModel.printLabel(it, pendingFontSize, pendingAlignment, pendingHorizontalAlignment, pendingColorMode)
+                viewModel.printLabel(it, pendingFontSize, pendingAlignment, pendingHorizontalAlignment, pendingColorMode, pendingQrConfig)
                 pendingPrintText = null
                 pendingFontSize = null
             }
@@ -60,8 +61,8 @@ class MainActivity : ComponentActivity() {
                 ) {
                     LabelPrinterApp(
                         viewModel = viewModel,
-                        onPrintRequested = { text, fontSize, alignment, horizAlignment, colorMode ->
-                            checkPermissionsAndPrint(text, fontSize, alignment, horizAlignment, colorMode)
+                        onPrintRequested = { text, fontSize, alignment, horizAlignment, colorMode, qrConfig ->
+                            checkPermissionsAndPrint(text, fontSize, alignment, horizAlignment, colorMode, qrConfig)
                         }
                     )
                 }
@@ -74,7 +75,8 @@ class MainActivity : ComponentActivity() {
         fontSize: Float?, 
         alignment: VerticalAlignment,
         horizAlignment: HorizontalAlignment,
-        colorMode: ColorMode
+        colorMode: ColorMode,
+        qrConfig: QrConfig
     ) {
         val permissionsNeeded = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN)
@@ -87,13 +89,14 @@ class MainActivity : ComponentActivity() {
         }
 
         if (missingPermissions.isEmpty()) {
-            viewModel.printLabel(text, fontSize, alignment, horizAlignment, colorMode)
+            viewModel.printLabel(text, fontSize, alignment, horizAlignment, colorMode, qrConfig)
         } else {
             pendingPrintText = text
             pendingFontSize = fontSize
             pendingAlignment = alignment
             pendingHorizontalAlignment = horizAlignment
             pendingColorMode = colorMode
+            pendingQrConfig = qrConfig
             requestPermissionLauncher.launch(missingPermissions.toTypedArray())
         }
     }
@@ -103,18 +106,20 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun LabelPrinterApp(
     viewModel: MainViewModel,
-    onPrintRequested: (String, Float?, VerticalAlignment, HorizontalAlignment, ColorMode) -> Unit
+    onPrintRequested: (String, Float?, VerticalAlignment, HorizontalAlignment, ColorMode, QrConfig) -> Unit
 ) {
     var text by remember { mutableStateOf("") }
     var customFontSize by remember { mutableStateOf<Float?>(null) }
     var verticalAlignment by remember { mutableStateOf(VerticalAlignment.CENTER) }
     var horizontalAlignment by remember { mutableStateOf(HorizontalAlignment.CENTER) }
     var colorMode by remember { mutableStateOf(ColorMode.NORMAL) }
+    var qrConfig by remember { mutableStateOf(QrConfig()) }
     
     var showFontSizeDialog by remember { mutableStateOf(false) }
     var showAlignmentDialog by remember { mutableStateOf(false) }
     var showHorizontalAlignmentDialog by remember { mutableStateOf(false) }
     var showColorModeDialog by remember { mutableStateOf(false) }
+    var showQrCodeDialog by remember { mutableStateOf(false) }
 
     val status by viewModel.status.collectAsState()
     val history by viewModel.history.collectAsState()
@@ -168,6 +173,17 @@ fun LabelPrinterApp(
         )
     }
 
+    if (showQrCodeDialog) {
+        QrCodeDialog(
+            currentConfig = qrConfig,
+            onDismiss = { showQrCodeDialog = false },
+            onConfigConfirmed = { config ->
+                qrConfig = config
+                showQrCodeDialog = false
+            }
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -186,7 +202,7 @@ fun LabelPrinterApp(
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(
-            onClick = { onPrintRequested(text, customFontSize, verticalAlignment, horizontalAlignment, colorMode) },
+            onClick = { onPrintRequested(text, customFontSize, verticalAlignment, horizontalAlignment, colorMode, qrConfig) },
             modifier = Modifier.fillMaxWidth(),
             enabled = text.isNotBlank()
         ) {
@@ -247,6 +263,15 @@ fun LabelPrinterApp(
                     ColorMode.INVERTED -> Icons.Default.InvertColors
                 }
                 Icon(icon, contentDescription = "Color Mode")
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            OutlinedIconButton(
+                onClick = { showQrCodeDialog = true },
+                modifier = Modifier.size(48.dp)
+            ) {
+                Icon(Icons.Default.QrCode, contentDescription = "QR Code Options")
             }
         }
 
@@ -360,6 +385,71 @@ fun HorizontalAlignmentDialog(
             }
         },
         confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun QrCodeDialog(
+    currentConfig: QrConfig,
+    onDismiss: () -> Unit,
+    onConfigConfirmed: (QrConfig) -> Unit
+) {
+    var placement by remember { mutableStateOf(currentConfig.placement) }
+    var useCustomContent by remember { mutableStateOf(currentConfig.useCustomContent) }
+    var customContent by remember { mutableStateOf(currentConfig.customContent) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("QR Code Options") },
+        text = {
+            Column {
+                Text("Placement", style = MaterialTheme.typography.titleSmall)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = placement == QrPlacement.NONE, onClick = { placement = QrPlacement.NONE })
+                    Text("None", modifier = Modifier.clickable { placement = QrPlacement.NONE })
+                    Spacer(modifier = Modifier.width(8.dp))
+                    RadioButton(selected = placement == QrPlacement.LEFT, onClick = { placement = QrPlacement.LEFT })
+                    Text("Left", modifier = Modifier.clickable { placement = QrPlacement.LEFT })
+                    Spacer(modifier = Modifier.width(8.dp))
+                    RadioButton(selected = placement == QrPlacement.RIGHT, onClick = { placement = QrPlacement.RIGHT })
+                    Text("Right", modifier = Modifier.clickable { placement = QrPlacement.RIGHT })
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text("Content", style = MaterialTheme.typography.titleSmall)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = !useCustomContent, onClick = { useCustomContent = false })
+                    Text("Use Label Text", modifier = Modifier.clickable { useCustomContent = false })
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = useCustomContent, onClick = { useCustomContent = true })
+                    Text("Custom Value", modifier = Modifier.clickable { useCustomContent = true })
+                }
+
+                if (useCustomContent) {
+                    OutlinedTextField(
+                        value = customContent,
+                        onValueChange = { customContent = it },
+                        label = { Text("QR Content") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { 
+                onConfigConfirmed(QrConfig(placement, useCustomContent, customContent)) 
+            }) {
+                Text("Set")
+            }
+        },
+        dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("Cancel")
             }

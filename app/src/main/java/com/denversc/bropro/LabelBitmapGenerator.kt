@@ -7,6 +7,8 @@ import android.graphics.Typeface
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.qrcode.QRCodeWriter
 
 enum class VerticalAlignment {
     TOP, CENTER, BOTTOM
@@ -20,6 +22,16 @@ enum class ColorMode {
     NORMAL, INVERTED
 }
 
+enum class QrPlacement {
+    NONE, LEFT, RIGHT
+}
+
+data class QrConfig(
+    val placement: QrPlacement = QrPlacement.NONE,
+    val useCustomContent: Boolean = false,
+    val customContent: String = ""
+)
+
 object LabelBitmapGenerator {
   private const val PRINTER_HEAD_WIDTH = 128 // Height of the bitmap for printing
 
@@ -28,15 +40,19 @@ object LabelBitmapGenerator {
       customFontSize: Float? = null,
       alignment: VerticalAlignment = VerticalAlignment.CENTER,
       horizontalAlignment: HorizontalAlignment = HorizontalAlignment.CENTER,
-      colorMode: ColorMode = ColorMode.NORMAL
+      colorMode: ColorMode = ColorMode.NORMAL,
+      qrConfig: QrConfig = QrConfig()
   ): Pair<Bitmap, Float> {
     // A 12mm tape only has a printable area of about 9mm (roughly 64 pixels)
     // centered on the 128-pixel print head.
     val maxPrintHeight = 64f
     var currentFontSize = customFontSize ?: 60f
     
+    val textColor = if (colorMode == ColorMode.INVERTED) Color.WHITE else Color.BLACK
+    val backgroundColor = if (colorMode == ColorMode.INVERTED) Color.BLACK else Color.WHITE
+
     val textPaint = TextPaint().apply {
-      color = if (colorMode == ColorMode.INVERTED) Color.WHITE else Color.BLACK
+      color = textColor
       typeface = Typeface.DEFAULT_BOLD
       isAntiAlias = false
     }
@@ -74,16 +90,56 @@ object LabelBitmapGenerator {
         }
     }
 
-    val width = layout.width.coerceAtLeast(1)
+    // Prepare QR Code if enabled
+    var qrBitmap: Bitmap? = null
+    val qrSize = 64
+    val qrPadding = 16
+    if (qrConfig.placement != QrPlacement.NONE) {
+        val qrContent = if (qrConfig.useCustomContent) qrConfig.customContent else text
+        if (qrContent.isNotBlank()) {
+            try {
+                val writer = QRCodeWriter()
+                val bitMatrix = writer.encode(qrContent, BarcodeFormat.QR_CODE, qrSize, qrSize)
+                qrBitmap = Bitmap.createBitmap(qrSize, qrSize, Bitmap.Config.RGB_565)
+                for (x in 0 until qrSize) {
+                    for (y in 0 until qrSize) {
+                        qrBitmap.setPixel(x, y, if (bitMatrix[x, y]) textColor else backgroundColor)
+                    }
+                }
+            } catch (e: Exception) {
+                // Fail silently or handle error - for now, just don't draw QR
+            }
+        }
+    }
+
+    var totalWidth = layout.width.coerceAtLeast(1)
+    if (qrBitmap != null) {
+        totalWidth += qrSize + qrPadding
+    }
+    
     val height = PRINTER_HEAD_WIDTH
 
-    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
+    val bitmap = Bitmap.createBitmap(totalWidth, height, Bitmap.Config.RGB_565)
     val canvas = Canvas(bitmap)
-    canvas.drawColor(if (colorMode == ColorMode.INVERTED) Color.BLACK else Color.WHITE)
+    canvas.drawColor(backgroundColor)
 
-    // Calculate vertical offset based on alignment within the 64px printable area
-    // The printable area is centered at y=32 ( (128-64)/2 )
     val printableTop = (PRINTER_HEAD_WIDTH - maxPrintHeight) / 2f
+    
+    var textXOffset = 0f
+    var qrXOffset = 0f
+    
+    if (qrBitmap != null) {
+        if (qrConfig.placement == QrPlacement.LEFT) {
+            qrXOffset = 0f
+            textXOffset = (qrSize + qrPadding).toFloat()
+        } else {
+            qrXOffset = (layout.width + qrPadding).toFloat()
+            textXOffset = 0f
+        }
+        
+        canvas.drawBitmap(qrBitmap, qrXOffset, printableTop, null)
+    }
+
     val yOffset = when (alignment) {
         VerticalAlignment.TOP -> printableTop
         VerticalAlignment.CENTER -> printableTop + (maxPrintHeight - layout.height) / 2f
@@ -91,7 +147,7 @@ object LabelBitmapGenerator {
     }
 
     canvas.save()
-    canvas.translate(0f, yOffset)
+    canvas.translate(textXOffset, yOffset)
     layout.draw(canvas)
     canvas.restore()
 

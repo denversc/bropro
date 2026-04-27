@@ -27,10 +27,11 @@ class BrotherP300BTDriver {
       customFontSize: Float? = null,
       alignment: VerticalAlignment = VerticalAlignment.CENTER,
       horizontalAlignment: HorizontalAlignment = HorizontalAlignment.CENTER,
-      colorMode: ColorMode = ColorMode.NORMAL
+      colorMode: ColorMode = ColorMode.NORMAL,
+      qrConfig: QrConfig = QrConfig()
   ): Result<Unit> = withContext(Dispatchers.IO) {
     val device = findPairedDevice() ?: return@withContext Result.failure(Exception("P300BT not paired"))
-    val (bitmap, _) = LabelBitmapGenerator.createLabelBitmap(text, customFontSize, alignment, horizontalAlignment, colorMode)
+    val (bitmap, _) = LabelBitmapGenerator.createLabelBitmap(text, customFontSize, alignment, horizontalAlignment, colorMode, qrConfig)
 
     var socket: BluetoothSocket? = null
     try {

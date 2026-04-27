@@ -32,7 +32,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         fontSize: Float? = null, 
         alignment: VerticalAlignment = VerticalAlignment.CENTER,
         horizontalAlignment: HorizontalAlignment = HorizontalAlignment.CENTER,
-        colorMode: ColorMode = ColorMode.NORMAL
+        colorMode: ColorMode = ColorMode.NORMAL,
+        qrConfig: QrConfig = QrConfig()
     ) {
         if (text.isBlank()) {
             _status.value = "Cannot print empty label"
@@ -41,7 +42,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             _status.value = "Printing..."
-            val result = driver.printLabel(text, fontSize, alignment, horizontalAlignment, colorMode)
+            val result = driver.printLabel(text, fontSize, alignment, horizontalAlignment, colorMode, qrConfig)
 
             result.fold(
                 onSuccess = {
