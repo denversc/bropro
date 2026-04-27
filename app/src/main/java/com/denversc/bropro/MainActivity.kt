@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.TextFormat
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,14 +31,16 @@ class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
     private var pendingPrintText: String? = null
+    private var pendingFontSize: Float? = null
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         if (permissions.values.all { it }) {
             pendingPrintText?.let {
-                viewModel.printLabel(it)
+                viewModel.printLabel(it, pendingFontSize)
                 pendingPrintText = null
+                pendingFontSize = null
             }
         } else {
             // Handle permission denied
@@ -55,8 +58,8 @@ class MainActivity : ComponentActivity() {
                 ) {
                     LabelPrinterApp(
                         viewModel = viewModel,
-                        onPrintRequested = { text ->
-                            checkPermissionsAndPrint(text)
+                        onPrintRequested = { text, fontSize ->
+                            checkPermissionsAndPrint(text, fontSize)
                         }
                     )
                 }
@@ -64,7 +67,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun checkPermissionsAndPrint(text: String) {
+    private fun checkPermissionsAndPrint(text: String, fontSize: Float?) {
         val permissionsNeeded = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN)
         } else {
@@ -76,9 +79,10 @@ class MainActivity : ComponentActivity() {
         }
 
         if (missingPermissions.isEmpty()) {
-            viewModel.printLabel(text)
+            viewModel.printLabel(text, fontSize)
         } else {
             pendingPrintText = text
+            pendingFontSize = fontSize
             requestPermissionLauncher.launch(missingPermissions.toTypedArray())
         }
     }
@@ -88,11 +92,33 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun LabelPrinterApp(
     viewModel: MainViewModel,
-    onPrintRequested: (String) -> Unit
+    onPrintRequested: (String, Float?) -> Unit
 ) {
     var text by remember { mutableStateOf("") }
+    var customFontSize by remember { mutableStateOf<Float?>(null) }
+    var showFontSizeDialog by remember { mutableStateOf(false) }
+
     val status by viewModel.status.collectAsState()
     val history by viewModel.history.collectAsState()
+
+    val autoFontSize = remember(text) { viewModel.getAutoFontSize(text) }
+    val currentFontSize = customFontSize ?: autoFontSize
+
+    if (showFontSizeDialog) {
+        FontSizeDialog(
+            currentSize = currentFontSize,
+            isAuto = customFontSize == null,
+            onDismiss = { showFontSizeDialog = false },
+            onSizeSelected = { size ->
+                customFontSize = size
+                showFontSizeDialog = false
+            },
+            onResetToAuto = {
+                customFontSize = null
+                showFontSizeDialog = false
+            }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -112,11 +138,22 @@ fun LabelPrinterApp(
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(
-            onClick = { onPrintRequested(text) },
+            onClick = { onPrintRequested(text, customFontSize) },
             modifier = Modifier.fillMaxWidth(),
             enabled = text.isNotBlank()
         ) {
             Text("Print Label")
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        OutlinedButton(
+            onClick = { showFontSizeDialog = true },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Default.TextFormat, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Font Size: ${currentFontSize.toInt()} pt${if (customFontSize == null) " (Auto)" else ""}")
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -156,6 +193,51 @@ fun LabelPrinterApp(
             }
         }
     }
+}
+
+@Composable
+fun FontSizeDialog(
+    currentSize: Float,
+    isAuto: Boolean,
+    onDismiss: () -> Unit,
+    onSizeSelected: (Float) -> Unit,
+    onResetToAuto: () -> Unit
+) {
+    var sliderValue by remember { mutableStateOf(currentSize) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Select Font Size") },
+        text = {
+            Column {
+                Text("Size: ${sliderValue.toInt()} pt")
+                Slider(
+                    value = sliderValue,
+                    onValueChange = { sliderValue = it },
+                    valueRange = 1f..60f,
+                    steps = 58
+                )
+                if (!isAuto) {
+                    TextButton(
+                        onClick = onResetToAuto,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    ) {
+                        Text("Reset to Auto-calculated")
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSizeSelected(sliderValue) }) {
+                Text("Set")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable

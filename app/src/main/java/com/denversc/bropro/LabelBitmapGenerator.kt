@@ -11,11 +11,11 @@ import android.text.TextPaint
 object LabelBitmapGenerator {
   private const val PRINTER_HEAD_WIDTH = 128 // Height of the bitmap for printing
 
-  fun createLabelBitmap(text: String): Bitmap {
+  fun createLabelBitmap(text: String, customFontSize: Float? = null): Pair<Bitmap, Float> {
     // A 12mm tape only has a printable area of about 9mm (roughly 64 pixels)
     // centered on the 128-pixel print head.
     val maxPrintHeight = 64f
-    var currentFontSize = 60f
+    var currentFontSize = customFontSize ?: 60f
     
     val textPaint = TextPaint().apply {
       color = Color.BLACK
@@ -41,10 +41,13 @@ object LabelBitmapGenerator {
     }
 
     // Shrink font size until the total height fits within the print head
+    // Only auto-shrink if no custom font size is provided
     var layout = calculateLayout(currentFontSize)
-    while (layout.height > maxPrintHeight && currentFontSize > 10f) {
-      currentFontSize -= 2f
-      layout = calculateLayout(currentFontSize)
+    if (customFontSize == null) {
+        while (layout.height > maxPrintHeight && currentFontSize > 1f) {
+            currentFontSize -= 1f
+            layout = calculateLayout(currentFontSize)
+        }
     }
 
     val width = layout.width.coerceAtLeast(1)
@@ -61,6 +64,6 @@ object LabelBitmapGenerator {
     layout.draw(canvas)
     canvas.restore()
 
-    return bitmap
+    return Pair(bitmap, currentFontSize)
   }
 }

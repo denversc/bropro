@@ -27,7 +27,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _history.value = repository.getLabels()
     }
 
-    fun printLabel(text: String) {
+    fun printLabel(text: String, fontSize: Float? = null) {
         if (text.isBlank()) {
             _status.value = "Cannot print empty label"
             return
@@ -35,7 +35,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             _status.value = "Printing..."
-            val result = driver.printLabel(text)
+            val result = driver.printLabel(text, fontSize)
 
             result.fold(
                 onSuccess = {
@@ -47,6 +47,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             )
         }
+    }
+
+    fun getAutoFontSize(text: String): Float {
+        if (text.isEmpty()) return 60f
+        val (_, size) = LabelBitmapGenerator.createLabelBitmap(text)
+        return size
     }
 
     private fun saveLabel(text: String) {
