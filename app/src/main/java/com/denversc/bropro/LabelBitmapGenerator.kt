@@ -12,13 +12,23 @@ enum class VerticalAlignment {
     TOP, CENTER, BOTTOM
 }
 
+enum class HorizontalAlignment {
+    LEFT, CENTER, RIGHT
+}
+
+enum class ColorMode {
+    NORMAL, INVERTED
+}
+
 object LabelBitmapGenerator {
   private const val PRINTER_HEAD_WIDTH = 128 // Height of the bitmap for printing
 
   fun createLabelBitmap(
       text: String, 
       customFontSize: Float? = null,
-      alignment: VerticalAlignment = VerticalAlignment.CENTER
+      alignment: VerticalAlignment = VerticalAlignment.CENTER,
+      horizontalAlignment: HorizontalAlignment = HorizontalAlignment.CENTER,
+      colorMode: ColorMode = ColorMode.NORMAL
   ): Pair<Bitmap, Float> {
     // A 12mm tape only has a printable area of about 9mm (roughly 64 pixels)
     // centered on the 128-pixel print head.
@@ -26,7 +36,7 @@ object LabelBitmapGenerator {
     var currentFontSize = customFontSize ?: 60f
     
     val textPaint = TextPaint().apply {
-      color = Color.BLACK
+      color = if (colorMode == ColorMode.INVERTED) Color.WHITE else Color.BLACK
       typeface = Typeface.DEFAULT_BOLD
       isAntiAlias = false
     }
@@ -41,8 +51,14 @@ object LabelBitmapGenerator {
       }
       val exactWidth = maxWidth.toInt().coerceAtLeast(1)
       
+      val textAlignment = when (horizontalAlignment) {
+          HorizontalAlignment.LEFT -> Layout.Alignment.ALIGN_NORMAL
+          HorizontalAlignment.CENTER -> Layout.Alignment.ALIGN_CENTER
+          HorizontalAlignment.RIGHT -> Layout.Alignment.ALIGN_OPPOSITE
+      }
+      
       return StaticLayout.Builder.obtain(text, 0, text.length, textPaint, exactWidth)
-          .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+          .setAlignment(textAlignment)
           .setLineSpacing(0f, 1f)
           .setIncludePad(false)
           .build()
@@ -63,7 +79,7 @@ object LabelBitmapGenerator {
 
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
     val canvas = Canvas(bitmap)
-    canvas.drawColor(Color.WHITE)
+    canvas.drawColor(if (colorMode == ColorMode.INVERTED) Color.BLACK else Color.WHITE)
 
     // Calculate vertical offset based on alignment within the 64px printable area
     // The printable area is centered at y=32 ( (128-64)/2 )

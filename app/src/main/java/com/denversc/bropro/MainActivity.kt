@@ -32,13 +32,15 @@ class MainActivity : ComponentActivity() {
     private var pendingPrintText: String? = null
     private var pendingFontSize: Float? = null
     private var pendingAlignment: VerticalAlignment = VerticalAlignment.CENTER
+    private var pendingHorizontalAlignment: HorizontalAlignment = HorizontalAlignment.CENTER
+    private var pendingColorMode: ColorMode = ColorMode.NORMAL
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         if (permissions.values.all { it }) {
             pendingPrintText?.let {
-                viewModel.printLabel(it, pendingFontSize, pendingAlignment)
+                viewModel.printLabel(it, pendingFontSize, pendingAlignment, pendingHorizontalAlignment, pendingColorMode)
                 pendingPrintText = null
                 pendingFontSize = null
             }
@@ -58,8 +60,8 @@ class MainActivity : ComponentActivity() {
                 ) {
                     LabelPrinterApp(
                         viewModel = viewModel,
-                        onPrintRequested = { text, fontSize, alignment ->
-                            checkPermissionsAndPrint(text, fontSize, alignment)
+                        onPrintRequested = { text, fontSize, alignment, horizAlignment, colorMode ->
+                            checkPermissionsAndPrint(text, fontSize, alignment, horizAlignment, colorMode)
                         }
                     )
                 }
@@ -67,7 +69,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun checkPermissionsAndPrint(text: String, fontSize: Float?, alignment: VerticalAlignment) {
+    private fun checkPermissionsAndPrint(
+        text: String, 
+        fontSize: Float?, 
+        alignment: VerticalAlignment,
+        horizAlignment: HorizontalAlignment,
+        colorMode: ColorMode
+    ) {
         val permissionsNeeded = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN)
         } else {
@@ -79,11 +87,13 @@ class MainActivity : ComponentActivity() {
         }
 
         if (missingPermissions.isEmpty()) {
-            viewModel.printLabel(text, fontSize, alignment)
+            viewModel.printLabel(text, fontSize, alignment, horizAlignment, colorMode)
         } else {
             pendingPrintText = text
             pendingFontSize = fontSize
             pendingAlignment = alignment
+            pendingHorizontalAlignment = horizAlignment
+            pendingColorMode = colorMode
             requestPermissionLauncher.launch(missingPermissions.toTypedArray())
         }
     }
@@ -93,13 +103,18 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun LabelPrinterApp(
     viewModel: MainViewModel,
-    onPrintRequested: (String, Float?, VerticalAlignment) -> Unit
+    onPrintRequested: (String, Float?, VerticalAlignment, HorizontalAlignment, ColorMode) -> Unit
 ) {
     var text by remember { mutableStateOf("") }
     var customFontSize by remember { mutableStateOf<Float?>(null) }
     var verticalAlignment by remember { mutableStateOf(VerticalAlignment.CENTER) }
+    var horizontalAlignment by remember { mutableStateOf(HorizontalAlignment.CENTER) }
+    var colorMode by remember { mutableStateOf(ColorMode.NORMAL) }
+    
     var showFontSizeDialog by remember { mutableStateOf(false) }
     var showAlignmentDialog by remember { mutableStateOf(false) }
+    var showHorizontalAlignmentDialog by remember { mutableStateOf(false) }
+    var showColorModeDialog by remember { mutableStateOf(false) }
 
     val status by viewModel.status.collectAsState()
     val history by viewModel.history.collectAsState()
@@ -131,6 +146,28 @@ fun LabelPrinterApp(
         )
     }
 
+    if (showHorizontalAlignmentDialog) {
+        HorizontalAlignmentDialog(
+            currentAlignment = horizontalAlignment,
+            onDismiss = { showHorizontalAlignmentDialog = false },
+            onAlignmentSelected = { alignment ->
+                horizontalAlignment = alignment
+                showHorizontalAlignmentDialog = false
+            }
+        )
+    }
+
+    if (showColorModeDialog) {
+        ColorModeDialog(
+            currentMode = colorMode,
+            onDismiss = { showColorModeDialog = false },
+            onModeSelected = { mode ->
+                colorMode = mode
+                showColorModeDialog = false
+            }
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -149,7 +186,7 @@ fun LabelPrinterApp(
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(
-            onClick = { onPrintRequested(text, customFontSize, verticalAlignment) },
+            onClick = { onPrintRequested(text, customFontSize, verticalAlignment, horizontalAlignment, colorMode) },
             modifier = Modifier.fillMaxWidth(),
             enabled = text.isNotBlank()
         ) {
@@ -169,16 +206,48 @@ fun LabelPrinterApp(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        OutlinedIconButton(
-            onClick = { showAlignmentDialog = true },
-            modifier = Modifier.size(48.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center
         ) {
-            val icon = when (verticalAlignment) {
-                VerticalAlignment.TOP -> Icons.Default.VerticalAlignTop
-                VerticalAlignment.CENTER -> Icons.Default.VerticalAlignCenter
-                VerticalAlignment.BOTTOM -> Icons.Default.VerticalAlignBottom
+            OutlinedIconButton(
+                onClick = { showAlignmentDialog = true },
+                modifier = Modifier.size(48.dp)
+            ) {
+                val icon = when (verticalAlignment) {
+                    VerticalAlignment.TOP -> Icons.Default.VerticalAlignTop
+                    VerticalAlignment.CENTER -> Icons.Default.VerticalAlignCenter
+                    VerticalAlignment.BOTTOM -> Icons.Default.VerticalAlignBottom
+                }
+                Icon(icon, contentDescription = "Vertical Alignment")
             }
-            Icon(icon, contentDescription = "Vertical Alignment")
+            
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            OutlinedIconButton(
+                onClick = { showHorizontalAlignmentDialog = true },
+                modifier = Modifier.size(48.dp)
+            ) {
+                val icon = when (horizontalAlignment) {
+                    HorizontalAlignment.LEFT -> Icons.Default.FormatAlignLeft
+                    HorizontalAlignment.CENTER -> Icons.Default.FormatAlignCenter
+                    HorizontalAlignment.RIGHT -> Icons.Default.FormatAlignRight
+                }
+                Icon(icon, contentDescription = "Horizontal Alignment")
+            }
+            
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            OutlinedIconButton(
+                onClick = { showColorModeDialog = true },
+                modifier = Modifier.size(48.dp)
+            ) {
+                val icon = when (colorMode) {
+                    ColorMode.NORMAL -> Icons.Default.FormatColorText
+                    ColorMode.INVERTED -> Icons.Default.InvertColors
+                }
+                Icon(icon, contentDescription = "Color Mode")
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -248,6 +317,78 @@ fun VerticalAlignmentDialog(
                     icon = Icons.Default.VerticalAlignBottom,
                     isSelected = currentAlignment == VerticalAlignment.BOTTOM,
                     onClick = { onAlignmentSelected(VerticalAlignment.BOTTOM) }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun HorizontalAlignmentDialog(
+    currentAlignment: HorizontalAlignment,
+    onDismiss: () -> Unit,
+    onAlignmentSelected: (HorizontalAlignment) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Horizontal Alignment") },
+        text = {
+            Column {
+                AlignmentOption(
+                    label = "Left",
+                    icon = Icons.Default.FormatAlignLeft,
+                    isSelected = currentAlignment == HorizontalAlignment.LEFT,
+                    onClick = { onAlignmentSelected(HorizontalAlignment.LEFT) }
+                )
+                AlignmentOption(
+                    label = "Center",
+                    icon = Icons.Default.FormatAlignCenter,
+                    isSelected = currentAlignment == HorizontalAlignment.CENTER,
+                    onClick = { onAlignmentSelected(HorizontalAlignment.CENTER) }
+                )
+                AlignmentOption(
+                    label = "Right",
+                    icon = Icons.Default.FormatAlignRight,
+                    isSelected = currentAlignment == HorizontalAlignment.RIGHT,
+                    onClick = { onAlignmentSelected(HorizontalAlignment.RIGHT) }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun ColorModeDialog(
+    currentMode: ColorMode,
+    onDismiss: () -> Unit,
+    onModeSelected: (ColorMode) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Color Mode") },
+        text = {
+            Column {
+                AlignmentOption(
+                    label = "Normal (Black Text)",
+                    icon = Icons.Default.FormatColorText,
+                    isSelected = currentMode == ColorMode.NORMAL,
+                    onClick = { onModeSelected(ColorMode.NORMAL) }
+                )
+                AlignmentOption(
+                    label = "Inverted (White Text)",
+                    icon = Icons.Default.InvertColors,
+                    isSelected = currentMode == ColorMode.INVERTED,
+                    onClick = { onModeSelected(ColorMode.INVERTED) }
                 )
             }
         },

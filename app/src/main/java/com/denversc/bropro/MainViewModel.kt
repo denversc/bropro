@@ -27,7 +27,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _history.value = repository.getLabels()
     }
 
-    fun printLabel(text: String, fontSize: Float? = null, alignment: VerticalAlignment = VerticalAlignment.CENTER) {
+    fun printLabel(
+        text: String, 
+        fontSize: Float? = null, 
+        alignment: VerticalAlignment = VerticalAlignment.CENTER,
+        horizontalAlignment: HorizontalAlignment = HorizontalAlignment.CENTER,
+        colorMode: ColorMode = ColorMode.NORMAL
+    ) {
         if (text.isBlank()) {
             _status.value = "Cannot print empty label"
             return
@@ -35,7 +41,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             _status.value = "Printing..."
-            val result = driver.printLabel(text, fontSize, alignment)
+            val result = driver.printLabel(text, fontSize, alignment, horizontalAlignment, colorMode)
 
             result.fold(
                 onSuccess = {
