@@ -35,7 +35,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         colorMode: ColorMode = ColorMode.NORMAL,
         qrConfig: QrConfig = QrConfig()
     ) {
-        if (text.isBlank()) {
+        val willPrintQr = qrConfig.placement != QrPlacement.NONE && 
+            (if (qrConfig.useCustomContent) qrConfig.customContent else text).isNotBlank()
+
+        if (text.isBlank() && !willPrintQr) {
             _status.value = "Cannot print empty label"
             return
         }
