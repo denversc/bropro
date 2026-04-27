@@ -26,17 +26,18 @@ object LabelBitmapGenerator {
         .setIncludePad(false)
         .build()
 
-    val width = layout.width.coerceAtLeast(1)
+    val width = layout.width.coerceAtLeast(1) + 120 // Add padding for feed
     val height = PRINTER_HEAD_WIDTH
 
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
     val canvas = Canvas(bitmap)
     canvas.drawColor(Color.WHITE)
 
-    // Center text vertically on the 128px print head
+    // Center text vertically and horizontally
     val yOffset = (height - layout.height) / 2f
+    val xOffset = 60f
     canvas.save()
-    canvas.translate(0f, yOffset)
+    canvas.translate(xOffset, yOffset)
     layout.draw(canvas)
     canvas.restore()
 
