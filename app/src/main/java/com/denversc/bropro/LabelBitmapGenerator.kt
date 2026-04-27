@@ -19,25 +19,31 @@ object LabelBitmapGenerator {
       isAntiAlias = false // Crisp edges for printing
     }
 
-    // Measure text to determine bitmap length
-    val layout = StaticLayout.Builder.obtain(text, 0, text.length, textPaint, 1000)
+    // Measure actual text width to avoid printing a fixed 1000-pixel (5.5 inch) wide image
+    var maxWidth = 0f
+    text.split("\n").forEach { line ->
+      val w = textPaint.measureText(line)
+      if (w > maxWidth) maxWidth = w
+    }
+    val exactWidth = maxWidth.toInt().coerceAtLeast(1)
+
+    val layout = StaticLayout.Builder.obtain(text, 0, text.length, textPaint, exactWidth)
         .setAlignment(Layout.Alignment.ALIGN_NORMAL)
         .setLineSpacing(0f, 1f)
         .setIncludePad(false)
         .build()
 
-    val width = layout.width.coerceAtLeast(1) + 120 // Add padding for feed
+    val width = exactWidth
     val height = PRINTER_HEAD_WIDTH
 
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
     val canvas = Canvas(bitmap)
     canvas.drawColor(Color.WHITE)
 
-    // Center text vertically and horizontally
+    // Center text vertically on the 128px print head
     val yOffset = (height - layout.height) / 2f
-    val xOffset = 60f
     canvas.save()
-    canvas.translate(xOffset, yOffset)
+    canvas.translate(0f, yOffset)
     layout.draw(canvas)
     canvas.restore()
 
