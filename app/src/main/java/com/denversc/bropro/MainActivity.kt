@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -121,6 +123,7 @@ fun LabelPrinterApp(
     var showColorModeDialog by remember { mutableStateOf(false) }
     var showQrCodeDialog by remember { mutableStateOf(false) }
     var showPlacementErrorDialog by remember { mutableStateOf(false) }
+    var showDateDialog by remember { mutableStateOf(false) }
     
     var pendingPrintText by remember { mutableStateOf("") }
 
@@ -184,6 +187,16 @@ fun LabelPrinterApp(
                 qrConfig = config
                 text += LabelBitmapGenerator.BARCODE_CHAR
                 showQrCodeDialog = false
+            }
+        )
+    }
+
+    if (showDateDialog) {
+        DateDialog(
+            onDismiss = { showDateDialog = false },
+            onDateSelected = { selectedDate ->
+                text += selectedDate
+                showDateDialog = false
             }
         )
     }
@@ -302,6 +315,15 @@ fun LabelPrinterApp(
             ) {
                 Icon(Icons.Default.QrCode, contentDescription = "Add QR Code")
             }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            OutlinedIconButton(
+                onClick = { showDateDialog = true },
+                modifier = Modifier.size(48.dp)
+            ) {
+                Icon(Icons.Default.CalendarToday, contentDescription = "Add Date")
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -340,6 +362,60 @@ fun LabelPrinterApp(
                 )
             }
         }
+    }
+}
+
+@Composable
+fun DateDialog(
+    onDismiss: () -> Unit,
+    onDateSelected: (String) -> Unit
+) {
+    val now = ZonedDateTime.now()
+    val formatter1 = DateTimeFormatter.ofPattern("EEE MMM d")
+    val formatter2 = DateTimeFormatter.ofPattern("MMM d, yyyy")
+    
+    val date1 = now.format(formatter1)
+    val date2 = now.format(formatter2)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Select Date Format") },
+        text = {
+            Column {
+                DateOption(
+                    label = date1,
+                    onClick = { onDateSelected(date1) }
+                )
+                DateOption(
+                    label = date2,
+                    onClick = { onDateSelected(date2) }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun DateOption(
+    label: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge
+        )
     }
 }
 
